@@ -29,6 +29,9 @@ function dump_type:table(memo, acc)
 	end
 	for k, v in pairs(self) do
 		if type(k) ~= 'number' or floor(k) ~= k or k < 1 or k > nself then
+			if type(k) == "table" then
+				error("table key cannot be a table")
+			end
 			dump_object(k, memo, acc)
 			acc[#acc + 1] = ':'
 			dump_object(v, memo, acc)
@@ -151,6 +154,9 @@ local expect_object_head = {
 		while true do
 			k, i = expect_object(string, i)
 			if string:sub(i, i) == ':' then
+				if k ~= k or k == nil or type(k) == "table" then
+					error("Table key was nil or nan or table")
+				end
 				v, i = expect_object(string, i + 1)
 				nt[k] = v
 			else
