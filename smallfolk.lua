@@ -1,49 +1,45 @@
 local M = {}
+Smallfolk = M
 local expect_object, dump_object
 local error, tostring, pairs, type, floor, huge, concat = error, tostring, pairs, type, math.floor, math.huge, table.concat
 
 local dump_type = {}
 
-function dump_type:string(nmemo, memo, acc)
+function dump_type:string(memo, acc)
 	local nacc = #acc
 	acc[nacc + 1] = '"'
 	acc[nacc + 2] = self:gsub('"', '""')
 	acc[nacc + 3] = '"'
-	return nmemo
 end
 
-function dump_type:number(nmemo, memo, acc)
+function dump_type:number(memo, acc)
 	acc[#acc + 1] = ("%.17g"):format(self)
-	return nmemo
 end
 
-function dump_type:table(nmemo, memo, acc)
+function dump_type:table(memo, acc)
 	if memo[self] then
-		acc[#acc + 1] = '@'
-		acc[#acc + 1] = tostring(memo[self])
-		return nmemo
+		error("table inside itself")
 	end
-	nmemo = nmemo + 1
-	memo[self] = nmemo
+	memo[self] = true
 	acc[#acc + 1] = '{'
 	local nself = #self
 	for i = 1, nself do -- don't use ipairs here, we need the gaps
-		nmemo = dump_object(self[i], nmemo, memo, acc)
+		dump_object(self[i], memo, acc)
 		acc[#acc + 1] = ','
 	end
 	for k, v in pairs(self) do
 		if type(k) ~= 'number' or floor(k) ~= k or k < 1 or k > nself then
-			nmemo = dump_object(k, nmemo, memo, acc)
+			dump_object(k, memo, acc)
 			acc[#acc + 1] = ':'
-			nmemo = dump_object(v, nmemo, memo, acc)
+			dump_object(v, memo, acc)
 			acc[#acc + 1] = ','
 		end
 	end
 	acc[#acc] = acc[#acc] == '{' and '{}' or '}'
-	return nmemo
+	memo[self] = nil
 end
 
-function dump_object(object, nmemo, memo, acc)
+function dump_object(object, memo, acc)
 	if object == true then
 		acc[#acc + 1] = 't'
 	elseif object == false then
@@ -65,16 +61,14 @@ function dump_object(object, nmemo, memo, acc)
 		if not dump_type[t] then
 			error('cannot dump type ' .. t)
 		end
-		return dump_type[t](object, nmemo, memo, acc)
+		dump_type[t](object, memo, acc)
 	end
-	return nmemo
 end
 
 function M.dumps(object)
-	local nmemo = 0
 	local memo = {}
 	local acc = {}
-	dump_object(object, nmemo, memo, acc)
+	dump_object(object, memo, acc)
 	return concat(acc)
 end
 
@@ -148,17 +142,16 @@ local expect_object_head = {
 	['0'] = function(string, i)
 		return expect_number(string, i - 1)
 	end,
-	['{'] = function(string, i, tables)
+	['{'] = function(string, i)
 		local nt, k, v = {}
 		local j = 1
-		tables[#tables + 1] = nt
 		if string:sub(i, i) == '}' then
 			return nt, i + 1
 		end
 		while true do
-			k, i = expect_object(string, i, tables)
+			k, i = expect_object(string, i)
 			if string:sub(i, i) == ':' then
-				v, i = expect_object(string, i + 1, tables)
+				v, i = expect_object(string, i + 1)
 				nt[k] = v
 			else
 				nt[j] = k
@@ -174,14 +167,6 @@ local expect_object_head = {
 			end
 		end
 	end,
-	['@'] = function(string, i, tables)
-		local match = string:match('^%d+', i)
-		local ref = tonumber(match)
-		if tables[ref] then
-			return tables[ref], i + #match
-		end
-		invalid(i)
-	end,
 }
 expect_object_head['1'] = expect_object_head['0']
 expect_object_head['2'] = expect_object_head['0']
@@ -195,10 +180,10 @@ expect_object_head['9'] = expect_object_head['0']
 expect_object_head['-'] = expect_object_head['0']
 expect_object_head['.'] = expect_object_head['0']
 
-expect_object = function(string, i, tables)
+expect_object = function(string, i)
 	local head = string:sub(i, i)
 	if expect_object_head[head] then
-		return expect_object_head[head](string, i + 1, tables)
+		return expect_object_head[head](string, i + 1)
 	end
 	invalid(i)
 end
